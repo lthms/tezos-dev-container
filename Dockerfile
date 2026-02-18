@@ -45,6 +45,7 @@ RUN . "$NVM_DIR/nvm.sh" && ln -sf "$(dirname "$(which node)")" "$NVM_DIR/current
 # Docker layer = filesystem diff, so only modified files in _build/ are stored.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
+    --mount=type=cache,target=/tmp/sccache-tmp \
     cd /root/tezos && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \

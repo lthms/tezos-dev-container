@@ -65,7 +65,8 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
       x86_64-unknown-linux-musl
 
 ENV RUSTC_WRAPPER=sccache \
-    SCCACHE_CACHE_SIZE=5G
+    SCCACHE_CACHE_SIZE=5G \
+    SCCACHE_TMPDIR=/tmp/sccache-tmp
 
 # ---------------------------------------------------------------------------
 # Layer 4: nvm + Node.js
@@ -156,6 +157,7 @@ RUN make -f kernels.mk build-deps && \
 # Intermediates live in the cache, only final .a/.so files end up in _build.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
+    --mount=type=cache,target=/tmp/sccache-tmp \
     scripts/slim-mode.sh on && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
