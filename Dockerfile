@@ -43,7 +43,7 @@ RUN cd /root/tezos && . scripts/version.sh && \
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
     cd /root/tezos && \
-    . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
+    . "$NVM_DIR/nvm.sh" && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
     dune build tezt/tests/main.exe && \

@@ -135,10 +135,15 @@ RUN --mount=type=cache,target=/root/.opam/download-cache \
     make build-dev-deps && \
     rm -rf _opam/.opam-switch/build _opam/.opam-switch/sources
 
+ENV OPAM_SWITCH_PREFIX=/root/tezos/_opam \
+    CAML_LD_LIBRARY_PATH=/root/tezos/_opam/lib/stublibs:/root/tezos/_opam/lib/ocaml/stublibs:/root/tezos/_opam/lib/ocaml \
+    OCAML_TOPLEVEL_PATH=/root/tezos/_opam/lib/toplevel \
+    PATH=/root/tezos/_opam/bin:${PATH}
+
 # ---------------------------------------------------------------------------
 # Layer 10: Kernel dependencies
 # ---------------------------------------------------------------------------
-RUN . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
+RUN . "$NVM_DIR/nvm.sh" && \
     make -f kernels.mk build-deps && \
     make -f etherlink.mk build-deps
 
@@ -149,7 +154,7 @@ RUN . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
 # Intermediates live in the cache, only final .a/.so files end up in _build.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
-    . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
+    . "$NVM_DIR/nvm.sh" && \
     scripts/slim-mode.sh on && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
