@@ -162,7 +162,8 @@ RUN --mount=type=cache,target=/tmp/cargo-target \
     make -f kernels.mk kernel_sdk && \
     dune build tezt/tests/main.exe && \
     dune build etherlink/tezt/tests/main.exe && \
-    rm -f octez-* etherlink-* fa-bridge-*
+    rm -f octez-* etherlink-* fa-bridge-* && \
+    find . -name Cargo.toml -execdir rm -rf target \;
 
 # ---------------------------------------------------------------------------
 # Layer 12: Environment setup
