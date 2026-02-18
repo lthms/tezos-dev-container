@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/sccache \
     cd /root/tezos && \
     . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
     make && \
+    make -f etherlink.mk evm_kernel.wasm && \
     dune build tezt/tests/main.exe && \
     dune build etherlink/tezt/tests/main.exe
 
