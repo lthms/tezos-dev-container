@@ -41,8 +41,7 @@ RUN cd /root/tezos && . scripts/version.sh && \
 # Dune only recompiles what changed since the base image's build.
 # Docker layer = filesystem diff, so only modified files in _build/ are stored.
 # ---------------------------------------------------------------------------
-RUN --mount=type=cache,target=/root/.cache/sccache \
-    --mount=type=cache,target=/tmp/cargo-target \
+RUN --mount=type=cache,target=/tmp/cargo-target \
     cd /root/tezos && \
     . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
     make && \
