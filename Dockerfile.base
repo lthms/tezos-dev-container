@@ -117,6 +117,10 @@ RUN . scripts/version.sh && \
       nvm install "$recommended_node_version"; \
     fi
 
+# Stable Node.js symlink so it's on PATH without sourcing nvm.sh
+RUN . "$NVM_DIR/nvm.sh" && ln -sf "$(dirname "$(which node)")" "$NVM_DIR/current"
+ENV PATH=$NVM_DIR/current:${PATH}
+
 # ---------------------------------------------------------------------------
 # Shared Rust target dir: deduplicates deps across the three Rust sub-builds.
 # Mounted as a BuildKit cache so intermediates stay out of the image.
@@ -129,7 +133,6 @@ ENV OCTEZ_RUST_DEPS_TARGET_DIR=/tmp/cargo-target \
 # Layer 8-9: OCaml build dependencies (uses BuildKit cache mounts)
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/root/.opam/download-cache \
-    . "$NVM_DIR/nvm.sh" && \
     make build-deps && \
     eval $(opam env) && \
     make build-dev-deps && \
@@ -143,8 +146,7 @@ ENV OPAM_SWITCH_PREFIX=/root/tezos/_opam \
 # ---------------------------------------------------------------------------
 # Layer 10: Kernel dependencies
 # ---------------------------------------------------------------------------
-RUN . "$NVM_DIR/nvm.sh" && \
-    make -f kernels.mk build-deps && \
+RUN make -f kernels.mk build-deps && \
     make -f etherlink.mk build-deps
 
 # ---------------------------------------------------------------------------
@@ -154,7 +156,6 @@ RUN . "$NVM_DIR/nvm.sh" && \
 # Intermediates live in the cache, only final .a/.so files end up in _build.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
-    . "$NVM_DIR/nvm.sh" && \
     scripts/slim-mode.sh on && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
@@ -166,9 +167,7 @@ RUN --mount=type=cache,target=/tmp/cargo-target \
 # ---------------------------------------------------------------------------
 # Layer 12: Environment setup
 # ---------------------------------------------------------------------------
-RUN echo 'eval $(opam env --switch=/root/tezos --set-switch)' >> /root/.bashrc && \
-    echo 'export NVM_DIR=/root/.nvm' >> /root/.bashrc && \
-    echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> /root/.bashrc
+RUN echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> /root/.bashrc
 
 WORKDIR /root/tezos
 CMD ["/bin/bash"]

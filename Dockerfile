@@ -36,6 +36,9 @@ RUN cd /root/tezos && . scripts/version.sh && \
       nvm install "$recommended_node_version"; \
     fi
 
+# Update Node.js symlink in case of version drift
+RUN . "$NVM_DIR/nvm.sh" && ln -sf "$(dirname "$(which node)")" "$NVM_DIR/current"
+
 # ---------------------------------------------------------------------------
 # Incremental rebuild
 # Dune only recompiles what changed since the base image's build.
@@ -43,7 +46,6 @@ RUN cd /root/tezos && . scripts/version.sh && \
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
     cd /root/tezos && \
-    . "$NVM_DIR/nvm.sh" && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
     make -f kernels.mk kernel_sdk && \
