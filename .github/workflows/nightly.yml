@@ -69,3 +69,11 @@ jobs:
             GIT_BRANCH=${{ inputs.git_branch || 'master' }}
           cache-from: type=gha,scope=nightly
           cache-to: type=gha,mode=max,scope=nightly
+
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: tezos-dev-container
+          package-type: container
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: false
