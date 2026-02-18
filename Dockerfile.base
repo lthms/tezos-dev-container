@@ -19,6 +19,7 @@ RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl git pkg-config sudo \
       autoconf automake libtool cmake m4 patch perl wget unzip rsync file \
+      jq ripgrep less glab \
       cargo clang musl-tools wabt binutils-gold \
       binutils-riscv64-unknown-elf gcc-riscv64-linux-gnu \
       # opam depexts commonly needed by octez
@@ -85,7 +86,7 @@ RUN curl -L https://foundry.paradigm.xyz | bash && \
 ENV PATH="/root/.foundry/bin:${PATH}"
 
 # ---------------------------------------------------------------------------
-# Layer 6: Clone the repository (invalidates nightly)
+# Layer 6: Clone the repository
 # ---------------------------------------------------------------------------
 RUN git clone --depth 1 --branch "$GIT_BRANCH" https://gitlab.com/tezos/tezos.git /root/tezos
 WORKDIR /root/tezos
