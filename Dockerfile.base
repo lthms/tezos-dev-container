@@ -57,6 +57,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
       sh -s -- -y --default-toolchain "$RUST_VERSION" && \
     curl -fsSL "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" | \
       tar xz -C /usr/local/bin --strip-components=1 "sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache" && \
+    mv /usr/local/bin/sccache /usr/local/bin/sccache.bin && \
+    printf '#!/bin/sh\nexport TMPDIR=/tmp/sccache-tmp\nmkdir -p "$TMPDIR"\nexec sccache.bin "$@"\n' \
+      > /usr/local/bin/sccache && \
+    chmod +x /usr/local/bin/sccache && \
     rustup target add \
       wasm32-unknown-unknown \
       riscv64gc-unknown-none-elf \
@@ -65,8 +69,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
       x86_64-unknown-linux-musl
 
 ENV RUSTC_WRAPPER=sccache \
-    SCCACHE_CACHE_SIZE=5G \
-    SCCACHE_TMPDIR=/tmp/sccache-tmp
+    SCCACHE_CACHE_SIZE=5G
 
 # ---------------------------------------------------------------------------
 # Layer 4: nvm + Node.js
@@ -157,7 +160,6 @@ RUN make -f kernels.mk build-deps && \
 # Intermediates live in the cache, only final .a/.so files end up in _build.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/tmp/cargo-target \
-    --mount=type=cache,target=/tmp/sccache-tmp \
     scripts/slim-mode.sh on && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
