@@ -46,6 +46,7 @@ RUN --mount=type=cache,target=/tmp/cargo-target \
     . "$NVM_DIR/nvm.sh" && \
     make && \
     make -f etherlink.mk evm_kernel.wasm && \
+    make -f kernels.mk kernel_sdk && \
     dune build tezt/tests/main.exe && \
     dune build etherlink/tezt/tests/main.exe
 
