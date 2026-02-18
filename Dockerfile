@@ -1,98 +1,20 @@
-FROM debian:trixie-slim
+ARG BASE_TAG=latest
+FROM ghcr.io/lthms/tezos-dev-base:${BASE_TAG}
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
-# ---------------------------------------------------------------------------
-# Build args: hardcode current versions for layer caching.
-# These rarely change; when they do, only the affected layer rebuilds.
-# ---------------------------------------------------------------------------
-ARG OCAML_VERSION=5.3.0
-ARG RUST_VERSION=1.88.0
-ARG NODE_VERSION=18.18.2
-ARG OPAM_VERSION=2.3.0
-ARG FORGE_VERSION=1.5.0
 ARG GIT_BRANCH=master
 
 # ---------------------------------------------------------------------------
-# Layer 1: System packages + kernel cross-compilation tools
+# Update the repository
 # ---------------------------------------------------------------------------
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      build-essential ca-certificates curl git pkg-config sudo \
-      autoconf automake libtool cmake m4 patch perl wget unzip rsync file \
-      cargo clang musl-tools wabt binutils-gold \
-      binutils-riscv64-unknown-elf gcc-riscv64-linux-gnu \
-      # opam depexts commonly needed by octez
-      libgmp-dev libev-dev libffi-dev libhidapi-dev zlib1g-dev \
-      libpq-dev libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# RISC-V cross-compilation symlink
-RUN ln -sf /usr/bin/riscv64-linux-gnu-gcc /usr/bin/riscv64-unknown-linux-musl-gcc
+RUN cd /root/tezos && \
+    git fetch origin "$GIT_BRANCH" && \
+    git checkout FETCH_HEAD
 
 # ---------------------------------------------------------------------------
-# Layer 2: opam (downloaded from GitHub releases)
+# Version drift detection + update
 # ---------------------------------------------------------------------------
-RUN ARCH="$(dpkg --print-architecture)" && \
-    case "$ARCH" in \
-      amd64) OPAM_ARCH=x86_64-linux ;; \
-      arm64) OPAM_ARCH=arm64-linux ;; \
-      *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
-    esac && \
-    TAG=$(echo "$OPAM_VERSION" | tr '~' '-') && \
-    curl -fsSL "https://github.com/ocaml/opam/releases/download/${TAG}/opam-${TAG}-${OPAM_ARCH}" \
-      -o /usr/local/bin/opam && \
-    chmod +x /usr/local/bin/opam && \
-    opam init --disable-sandboxing --bare --no-setup
-
-# ---------------------------------------------------------------------------
-# Layer 3: Rust via rustup + sccache + cross-compilation targets
-# ---------------------------------------------------------------------------
-ENV RUSTUP_HOME=/root/.rustup \
-    CARGO_HOME=/root/.cargo \
-    PATH="/root/.cargo/bin:${PATH}"
-
-ARG SCCACHE_VERSION=0.10.0
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-      sh -s -- -y --default-toolchain "$RUST_VERSION" && \
-    curl -fsSL "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" | \
-      tar xz -C /usr/local/bin --strip-components=1 "sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache" && \
-    rustup target add \
-      wasm32-unknown-unknown \
-      riscv64gc-unknown-none-elf \
-      riscv64gc-unknown-linux-gnu \
-      riscv64gc-unknown-linux-musl \
-      x86_64-unknown-linux-musl
-
-ENV RUSTC_WRAPPER=sccache
-
-# ---------------------------------------------------------------------------
-# Layer 4: nvm + Node.js
-# ---------------------------------------------------------------------------
-ENV NVM_DIR=/root/.nvm
-
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash && \
-    . "$NVM_DIR/nvm.sh" && \
-    nvm install "$NODE_VERSION"
-
-# ---------------------------------------------------------------------------
-# Layer 5: Foundry (forge)
-# ---------------------------------------------------------------------------
-RUN curl -L https://foundry.paradigm.xyz | bash && \
-    /root/.foundry/bin/foundryup -i "$FORGE_VERSION"
-
-ENV PATH="/root/.foundry/bin:${PATH}"
-
-# ---------------------------------------------------------------------------
-# Layer 6: Clone the repository (invalidates nightly)
-# ---------------------------------------------------------------------------
-RUN git clone --depth 1 --branch "$GIT_BRANCH" https://gitlab.com/tezos/tezos.git /root/tezos
-WORKDIR /root/tezos
-
-# ---------------------------------------------------------------------------
-# Layer 7: Version drift detection + update
-# If the repo pins different versions than what we installed, update in place.
-# ---------------------------------------------------------------------------
-RUN . scripts/version.sh && \
+RUN cd /root/tezos && . scripts/version.sh && \
     # Rust drift
     current_rust="$(rustc --version | cut -d' ' -f2)" && \
     if [ "$current_rust" != "$recommended_rust_version" ]; then \
@@ -115,49 +37,17 @@ RUN . scripts/version.sh && \
     fi
 
 # ---------------------------------------------------------------------------
-# Shared Rust target dir: deduplicates deps across the three Rust sub-builds.
-# Mounted as a BuildKit cache so intermediates stay out of the image.
-# ---------------------------------------------------------------------------
-ENV OCTEZ_RUST_DEPS_TARGET_DIR=/tmp/cargo-target \
-    OCTEZ_RUSTZCASH_DEPS_TARGET_DIR=/tmp/cargo-target \
-    OCTEZ_ETHERLINK_WASM_RUNTIME_TARGET_DIR=/tmp/cargo-target
-
-# ---------------------------------------------------------------------------
-# Layer 8-9: OCaml build dependencies (uses BuildKit cache mounts)
-# ---------------------------------------------------------------------------
-RUN --mount=type=cache,target=/root/.opam/download-cache \
-    . "$NVM_DIR/nvm.sh" && \
-    make build-deps && \
-    eval $(opam env) && \
-    make build-dev-deps
-
-# ---------------------------------------------------------------------------
-# Layer 10: Kernel dependencies
-# ---------------------------------------------------------------------------
-RUN . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
-    make -f kernels.mk build-deps && \
-    make -f etherlink.mk build-deps
-
-# ---------------------------------------------------------------------------
-# Layer 11: Build everything
-# Slim mode drops old protocols (~30% faster build, fewer binaries).
-# Cache mounts for Rust: sccache local cache + shared cargo target dir.
-# Intermediates live in the cache, only final .a/.so files end up in _build.
+# Incremental rebuild
+# Dune only recompiles what changed since the base image's build.
+# Docker layer = filesystem diff, so only modified files in _build/ are stored.
 # ---------------------------------------------------------------------------
 RUN --mount=type=cache,target=/root/.cache/sccache \
     --mount=type=cache,target=/tmp/cargo-target \
+    cd /root/tezos && \
     . "$NVM_DIR/nvm.sh" && eval $(opam env) && \
-    scripts/slim-mode.sh on && \
     make && \
     dune build tezt/tests/main.exe && \
     dune build etherlink/tezt/tests/main.exe
-
-# ---------------------------------------------------------------------------
-# Layer 12: Environment setup
-# ---------------------------------------------------------------------------
-RUN echo 'eval $(opam env --switch=/root/tezos --set-switch)' >> /root/.bashrc && \
-    echo 'export NVM_DIR=/root/.nvm' >> /root/.bashrc && \
-    echo '[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"' >> /root/.bashrc
 
 WORKDIR /root/tezos
 CMD ["/bin/bash"]

@@ -1,24 +1,19 @@
-name: Nightly build
+name: Weekly base image
 
 on:
   schedule:
-    # Midnight CET (UTC+1) = 23:00 UTC.
-    # During CEST (late March – late October) this fires at 01:00 local.
-    - cron: "0 23 * * *"
+    # Every Sunday at 22:00 UTC (before the nightly builds)
+    - cron: "0 22 * * 0"
   workflow_dispatch:
     inputs:
       git_branch:
         description: "tezos/tezos branch to build"
         required: false
         default: "master"
-      base_tag:
-        description: "Tag of the base image to build on"
-        required: false
-        default: "latest"
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/tezos-dev-base
 
 jobs:
   build-and-push:
@@ -61,11 +56,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile.base
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_TAG=${{ inputs.base_tag || 'latest' }}
             GIT_BRANCH=${{ inputs.git_branch || 'master' }}
-          cache-from: type=gha,scope=nightly
-          cache-to: type=gha,mode=max,scope=nightly
+          cache-from: type=gha,scope=base
+          cache-to: type=gha,mode=max,scope=base
