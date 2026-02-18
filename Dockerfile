@@ -51,7 +51,7 @@ RUN --mount=type=cache,target=/tmp/cargo-target \
     make -f kernels.mk kernel_sdk && \
     dune build tezt/tests/main.exe && \
     dune build etherlink/tezt/tests/main.exe && \
-    find . -name Cargo.toml -execdir rm -rf target \;
+    find . -name Cargo.toml -execdir rm -rf target \; 2>/dev/null || true
 
 WORKDIR /root/tezos
 CMD ["/bin/bash"]
