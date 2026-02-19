@@ -71,10 +71,10 @@ jobs:
           cache-from: type=gha,scope=nightly
           cache-to: type=gha,mode=max,scope=nightly
 
-      - name: Delete old package versions
-        uses: actions/delete-package-versions@v5
+      - name: Delete old images
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: tezos-dev-container
-          package-type: container
-          min-versions-to-keep: 1
-          delete-only-untagged-versions: false
+          package: tezos-dev-container
+          delete-untagged: true
+          keep-n-tagged: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
