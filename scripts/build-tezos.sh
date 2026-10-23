@@ -37,6 +37,12 @@ fi
 make -f etherlink.mk evm_kernel.wasm
 make BUILD_EXTRA='tezt/tests/main.exe etherlink/tezt/tests/main.exe'
 
+# Type-check every OCaml target, tests included, and build the dune code index
+# (one cctx.ocaml-index file per library under _build). ocamllsp and merlin
+# need the index for project-wide "find references"; without it they only
+# see the open file. Both land in _build and ship with the image.
+dune build @check @ocaml-index
+
 # Make copies installed executables into the checkout. Small launchers retain
 # those entry points without duplicating binaries. Unlike symlinks, they can be
 # overwritten by make's subsequent cp -f without a same-file error.
