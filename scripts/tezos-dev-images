@@ -14,13 +14,20 @@ exec 9>"${TEZOS_DEV_IMAGES_LOCK:-/run/lock/tezos-dev-images.lock}"
 flock 9
 
 if [[ "$1" == pull ]]; then
+  # The containerd image store, the default since Docker 29, drops the
+  # repository of an image that loses its last tag, so cleanup could not find
+  # the superseded image any more. A local tag keeps it discoverable.
+  if current=$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null); then
+    docker image tag "$image" "$repository:superseded-${current#sha256:}"
+  fi
   docker pull "$image"
   exit 0
 fi
 
 # Protect the current tag, not the newest creation timestamp.
 current=$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null) || exit 0
-# --digests exposes the repository of pulled images even after they lose a tag.
+# --digests exposes the repository of untagged pulled images in the classic
+# store. In the containerd store, the superseded-* tag set by pull does.
 images=$(docker image ls --all --digests --no-trunc --format '{{.ID}} {{.Repository}}' | sort -u)
 while read -r id origin; do
   [[ "$origin" == "$repository" && "$id" != "$current" ]] || continue
