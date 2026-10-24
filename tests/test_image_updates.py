@@ -18,6 +18,11 @@ if a[:2] == ['image', 'inspect']:
     if image not in s['images']:
         sys.exit(1)
     print(image)
+elif a[:2] == ['image', 'tag'] and len(a) == 4:
+    source = s['current'] if a[2].endswith(':latest') else a[2]
+    s.setdefault('tags', {}).setdefault(source, [])
+    if a[3] not in s['tags'][source]:
+        s['tags'][source].append(a[3])
 elif a == ['pull', 'ghcr.io/lthms/tezos-dev-container:latest']:
     if s.get('fail_pull'):
         sys.exit(1)
@@ -29,6 +34,9 @@ elif a == ['image', 'ls', '--all', '--digests', '--no-trunc', '--format', '{{.ID
         sys.exit(1)
     for image in s['images']:
         origin = s.get('repositories', {}).get(image, 'ghcr.io/lthms/tezos-dev-container')
+        # The containerd store forgets the repository of an image without tags.
+        if s.get('containerd') and image != s['current'] and not s.get('tags', {}).get(image):
+            origin = '<none>'
         print(image, origin)
 elif a[:2] == ['image', 'rm'] and len(a) == 3:
     s.setdefault('removals', []).append(a[2])
@@ -140,3 +148,25 @@ class ImageUpdateTests(unittest.TestCase):
         self.run_helper('pull')
         self.run_helper('clean')
         self.assertEqual(self.read()['images'], ['sha256:base', 'sha256:other', 'sha256:new'])
+
+    def test_containerd_store_keeps_superseded_image_discoverable(self):
+        self.save(**{**self.read(), 'containerd': True})
+        self.run_helper('pull')
+        self.run_helper('clean')
+        self.assertEqual(self.read()['images'], ['sha256:unrelated', 'sha256:new'])
+
+    def test_containerd_store_retries_superseded_image_in_use(self):
+        self.save(**{**self.read(), 'containerd': True, 'blocked': ['sha256:old']})
+        self.run_helper('pull')
+        self.run_helper('clean')
+        self.assertIn('sha256:old', self.read()['images'])
+        self.save(**{**self.read(), 'blocked': []})
+        self.run_helper('clean')
+        self.assertEqual(self.read()['images'], ['sha256:unrelated', 'sha256:new'])
+
+    def test_containerd_store_unchanged_pull_keeps_latest(self):
+        self.save(**{**self.read(), 'containerd': True, 'next': 'sha256:old'})
+        self.run_helper('pull')
+        self.run_helper('pull')
+        self.run_helper('clean')
+        self.assertNotIn('removals', self.read())
